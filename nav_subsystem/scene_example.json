@@ -1,0 +1,23 @@
+{
+  "scene_id": "example_scene_01",
+  "agent": {
+    "position": {"x": 0.0, "y": 0.0, "z": 0.0}
+  },
+  "objects": [
+    {
+      "objectId": "Mug_1",
+      "objectType": "Mug",
+      "position": {"x": 1.2, "y": 0.8, "z": -0.5}
+    },
+    {
+      "objectId": "Apple_1",
+      "objectType": "Apple",
+      "position": {"x": -0.4, "y": 0.9, "z": 2.1}
+    },
+    {
+      "objectId": "Chair_1",
+      "objectType": "Chair",
+      "position": {"x": 2.3, "y": 0.0, "z": 1.7}
+    }
+  ]
+}
