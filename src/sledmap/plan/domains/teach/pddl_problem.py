@@ -362,7 +362,7 @@ class TeachPDDLProblem:
                 else:
                     if not TeachSubgoal.check_instance_condition(instance, subgoal.object_constraint):
                         continue
-                    for recep_child_iid in instance.state["receptacleObjectIds"]():
+                    for recep_child_iid in instance.state["receptacleObjectIds"]:
                         recep_child = symbolic_state.get_instance(recep_child_iid)
                         print(recep_child_iid, recep_child)
                         if recep_child is not None and TeachSubgoal.check_instance_condition(recep_child, subgoal.subject_constraint):
