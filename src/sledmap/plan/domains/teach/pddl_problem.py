@@ -77,7 +77,26 @@ class TeachPDDLProblem:
         Translate a perceived symbolic state to a PDDL init state.
         """
         assert symbolic_state_dict, "Symbolic state dict cannot be empty!"
-        
+        symbolic_state_dict = dict(symbolic_state_dict)
+        missing_parent_ids = set()
+        for instance_state in symbolic_state_dict.values():
+            for oid in instance_state.get('parentReceptacles', []):
+                if oid not in symbolic_state_dict:
+                    missing_parent_ids.add(oid)
+        for oid in missing_parent_ids:
+            dummy_object = {
+                'objectId': oid,
+                'objectType': 'Receptacle',
+            }
+            dummy_state = create_default_object_state()
+            dummy_state['visible'].set_value(False)
+            dummy_state['isObserved'].set_value(False)
+            for state_name in dummy_state:
+                dummy_object[state_name] = dummy_state[state_name]()
+            dummy_object['distance'] = cls.DUMMY_OBJECT_DISTANCE / 10.0
+            dummy_object['centroid'] = [cls.DUMMY_OBJECT_DISTANCE] * 3
+            symbolic_state_dict[oid] = dummy_object
+
         objects_definition_str = "bot - Agent\n" # START_LOC - InteractiveObject\n"
         predicate_definition_str = ""
         distance_definition_str = ""
