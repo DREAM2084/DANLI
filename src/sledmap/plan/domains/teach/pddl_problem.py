@@ -179,7 +179,8 @@ class TeachPDDLProblem:
                 
                 if predicate == 'parentReceptacles':
                     for oid in value:
-                        predicate_definition_str += "(parentReceptacles {} {})\n".format(instance_id, oid)
+                        if oid in symbolic_state_dict:
+                            predicate_definition_str += "(parentReceptacles {} {})\n".format(instance_id, oid)
                 elif predicate == 'visible':
                     predicate_definition_str += "(isVisible {})\n".format(instance_id)
                 elif predicate == 'interactable':
