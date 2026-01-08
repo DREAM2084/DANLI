@@ -506,7 +506,10 @@ class TeachPDDLProblem:
         objects_to_keep = rel_obj | rel_obj_receptacles | rel_obj_siblings 
 
         for obj_id, obj_state in symbolic_state_dict.items():
-            if obj_id in subgoal.exclude_instance_ids or obj_id in subgoal.exclude_instance_ids_obj:
+            if (
+                obj_id in subgoal.exclude_instance_ids
+                or obj_id in subgoal.exclude_instance_ids_obj
+            ):
                 continue
             if obj_id in objects_to_keep:
                 pruned_state[obj_id] = obj_state
