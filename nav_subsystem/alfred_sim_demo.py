@@ -1,47 +1,31 @@
 import argparse
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 if __package__ is None:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from nav_subsystem.alfred_scene_loader import AlfredSceneConfig, load_alfred_scene_config
-
-
-@dataclass
-class SemanticObject:
-    object_id: str
-    object_type: str
-    position: Tuple[float, float, float]
-
-
-class SemanticMap:
-    def __init__(self) -> None:
-        self._objects: Dict[str, Dict[str, SemanticObject]] = {}
-
-    def update(self, objects: Iterable[SemanticObject]) -> None:
-        for obj in objects:
-            self._objects.setdefault(obj.object_type.lower(), {})[obj.object_id] = obj
-
-    def find(self, target_type: str) -> List[SemanticObject]:
-        return list(self._objects.get(target_type.lower(), {}).values())
+from nav_subsystem.scene_loader import SceneData, SceneObject
+from nav_subsystem.search_subsystem import NavigationSubsystem, SearchResult
 
 
 class AlfredNavigator:
     def __init__(self, controller) -> None:
         self.controller = controller
-        self.semantic_map = SemanticMap()
+        self.subsystem = NavigationSubsystem(
+            SceneData(scene_id="alfred_sim", agent_position=(0.0, 0.0, 0.0), objects=[])
+        )
 
-    def _extract_objects(self, event) -> List[SemanticObject]:
+    def _extract_objects(self, event) -> List[SceneObject]:
         objects = []
         for obj in event.metadata.get("objects", []):
             position = obj.get("position")
             if position is None:
                 continue
             objects.append(
-                SemanticObject(
+                SceneObject(
                     object_id=obj.get("objectId", obj.get("name", "")),
                     object_type=obj.get("objectType", obj.get("name", "")),
                     position=(float(position["x"]), float(position["y"]), float(position["z"])),
@@ -153,7 +137,7 @@ def main() -> None:
     if result is None:
         print(f"Target '{args.target}' not found after {args.max_steps} steps.")
     else:
-        print(f"Found {result.object_type} (id={result.object_id}) at {result.position}")
+        print(f"Found {result.target_type} (id={result.object_id}) at {result.position}")
 
     controller.stop()
 
