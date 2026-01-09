@@ -33,16 +33,23 @@ class AlfredNavigator:
             )
         return objects
 
+    def _closest(self, candidates: List[SemanticObject], agent_pos: Dict[str, float]) -> Optional[SemanticObject]:
+        if not candidates:
+            return None
+        ax, ay, az = agent_pos["x"], agent_pos["y"], agent_pos["z"]
+
+        def _distance(obj: SemanticObject) -> float:
+            ox, oy, oz = obj.position
+            return ((ax - ox) ** 2 + (ay - oy) ** 2 + (az - oz) ** 2) ** 0.5
+
+        return min(candidates, key=_distance)
+
     def step_and_update(self, action: Dict):
         event = self.controller.step(action)
-        objects = self._extract_objects(event)
-        self.subsystem.update_objects(objects)
-        agent_pos = event.metadata.get("agent", {}).get("position")
-        if agent_pos:
-            self.subsystem.update_agent_position((float(agent_pos["x"]), float(agent_pos["y"]), float(agent_pos["z"])))
+        self.semantic_map.update(self._extract_objects(event))
         return event
 
-    def search_for_object(self, target_type: str, max_steps: int) -> Optional[SearchResult]:
+    def search_for_object(self, target_type: str, max_steps: int) -> Optional[SemanticObject]:
         action_cycle = [
             {"action": "RotateLeft", "forceAction": True},
             {"action": "MoveAhead", "forceAction": True},
@@ -54,9 +61,10 @@ class AlfredNavigator:
 
         last_move_failed = False
         for step in range(max_steps):
-            result = self.subsystem.search_target(target_type)
-            if result.found:
-                return result
+            current = self.semantic_map.find(target_type)
+            if current:
+                agent_pos = self.controller.last_event.metadata["agent"]["position"]
+                return self._closest(current, agent_pos)
 
             action = action_cycle[step % len(action_cycle)]
             if last_move_failed:
