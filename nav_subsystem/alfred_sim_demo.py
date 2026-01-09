@@ -1,7 +1,7 @@
 import argparse
 import sys
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 if __package__ is None:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
@@ -33,23 +33,16 @@ class AlfredNavigator:
             )
         return objects
 
-    def _closest(self, candidates: List[SemanticObject], agent_pos: Dict[str, float]) -> Optional[SemanticObject]:
-        if not candidates:
-            return None
-        ax, ay, az = agent_pos["x"], agent_pos["y"], agent_pos["z"]
-
-        def _distance(obj: SemanticObject) -> float:
-            ox, oy, oz = obj.position
-            return ((ax - ox) ** 2 + (ay - oy) ** 2 + (az - oz) ** 2) ** 0.5
-
-        return min(candidates, key=_distance)
-
     def step_and_update(self, action: Dict):
         event = self.controller.step(action)
-        self.semantic_map.update(self._extract_objects(event))
+        objects = self._extract_objects(event)
+        self.subsystem.update_objects(objects)
+        agent_pos = event.metadata.get("agent", {}).get("position")
+        if agent_pos:
+            self.subsystem.update_agent_position((float(agent_pos["x"]), float(agent_pos["y"]), float(agent_pos["z"])))
         return event
 
-    def search_for_object(self, target_type: str, max_steps: int) -> Optional[SemanticObject]:
+    def search_for_object(self, target_type: str, max_steps: int) -> Optional[SearchResult]:
         action_cycle = [
             {"action": "RotateLeft", "forceAction": True},
             {"action": "MoveAhead", "forceAction": True},
@@ -61,10 +54,9 @@ class AlfredNavigator:
 
         last_move_failed = False
         for step in range(max_steps):
-            current = self.semantic_map.find(target_type)
-            if current:
-                agent_pos = self.controller.last_event.metadata["agent"]["position"]
-                return self._closest(current, agent_pos)
+            result = self.subsystem.search_target(target_type)
+            if result.found:
+                return result
 
             action = action_cycle[step % len(action_cycle)]
             if last_move_failed:
@@ -90,6 +82,7 @@ def _initialize_scene(controller, scene: AlfredSceneConfig) -> None:
     scene_name = f"FloorPlan{scene.scene_number}"
     controller.reset(scene_name)
     _safe_step(
+        controller,
         dict(
             action="Initialize",
             gridSize=0.25,
@@ -100,7 +93,7 @@ def _initialize_scene(controller, scene: AlfredSceneConfig) -> None:
             renderObjectImage=False,
             visibility_distance=1.5,
             makeAgentsVisible=False,
-        )
+        ),
     )
 
     if scene.object_toggles:
