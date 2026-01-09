@@ -78,6 +78,14 @@ def _safe_step(controller, action: Dict) -> None:
         print(f"Skipping unsupported action '{action_name}': {exc}")
 
 
+def _normalize_init_action(action: Dict) -> Dict:
+    if action.get("action") != "TeleportFull":
+        return dict(action)
+    sanitized = dict(action)
+    sanitized.pop("rotateOnTeleport", None)
+    return sanitized
+
+
 def _initialize_scene(controller, scene: AlfredSceneConfig) -> None:
     scene_name = f"FloorPlan{scene.scene_number}"
     controller.reset(scene_name)
@@ -104,7 +112,7 @@ def _initialize_scene(controller, scene: AlfredSceneConfig) -> None:
     if scene.object_poses:
         _safe_step(controller, dict(action="SetObjectPoses", objectPoses=scene.object_poses))
     if scene.init_action:
-        _safe_step(controller, dict(scene.init_action))
+        _safe_step(controller, _normalize_init_action(scene.init_action))
 
 
 def main() -> None:
