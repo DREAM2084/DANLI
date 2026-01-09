@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple
 
-from nav_subsystem.scene_loader import SceneData
-from nav_subsystem.semantic_map import SemanticMap, SemanticObject
+from nav_subsystem.scene_loader import SceneData, SceneObject
+from nav_subsystem.semantic_map import SemanticMap
 
 
 @dataclass
@@ -28,6 +28,12 @@ class NavigationSubsystem:
         self.scene = scene
         self.semantic_map = SemanticMap(scene.objects)
         self.agent_position = scene.agent_position
+
+    def update_agent_position(self, position: Tuple[float, float, float]) -> None:
+        self.agent_position = position
+
+    def update_objects(self, objects: List[SceneObject]) -> None:
+        self.semantic_map.update(objects)
 
     def search_target(self, target_type: str) -> SearchResult:
         candidates = self.semantic_map.search(target_type)

@@ -1,47 +1,31 @@
 import argparse
 import sys
-from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, List, Optional
 
 if __package__ is None:
     sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 from nav_subsystem.alfred_scene_loader import AlfredSceneConfig, load_alfred_scene_config
-
-
-@dataclass
-class SemanticObject:
-    object_id: str
-    object_type: str
-    position: Tuple[float, float, float]
-
-
-class SemanticMap:
-    def __init__(self) -> None:
-        self._objects: Dict[str, Dict[str, SemanticObject]] = {}
-
-    def update(self, objects: Iterable[SemanticObject]) -> None:
-        for obj in objects:
-            self._objects.setdefault(obj.object_type.lower(), {})[obj.object_id] = obj
-
-    def find(self, target_type: str) -> List[SemanticObject]:
-        return list(self._objects.get(target_type.lower(), {}).values())
+from nav_subsystem.scene_loader import SceneData, SceneObject
+from nav_subsystem.search_subsystem import NavigationSubsystem, SearchResult
 
 
 class AlfredNavigator:
     def __init__(self, controller) -> None:
         self.controller = controller
-        self.semantic_map = SemanticMap()
+        self.subsystem = NavigationSubsystem(
+            SceneData(scene_id="alfred_sim", agent_position=(0.0, 0.0, 0.0), objects=[])
+        )
 
-    def _extract_objects(self, event) -> List[SemanticObject]:
+    def _extract_objects(self, event) -> List[SceneObject]:
         objects = []
         for obj in event.metadata.get("objects", []):
             position = obj.get("position")
             if position is None:
                 continue
             objects.append(
-                SemanticObject(
+                SceneObject(
                     object_id=obj.get("objectId", obj.get("name", "")),
                     object_type=obj.get("objectType", obj.get("name", "")),
                     position=(float(position["x"]), float(position["y"]), float(position["z"])),
@@ -49,22 +33,16 @@ class AlfredNavigator:
             )
         return objects
 
-    def _closest(self, candidates: List[SemanticObject], agent_pos: Dict[str, float]) -> Optional[SemanticObject]:
-        if not candidates:
-            return None
-        ax, ay, az = agent_pos["x"], agent_pos["y"], agent_pos["z"]
-
-        def _distance(obj: SemanticObject) -> float:
-            ox, oy, oz = obj.position
-            return ((ax - ox) ** 2 + (ay - oy) ** 2 + (az - oz) ** 2) ** 0.5
-
-        return min(candidates, key=_distance)
-
-    def step_and_update(self, action: Dict) -> None:
+    def step_and_update(self, action: Dict):
         event = self.controller.step(action)
-        self.semantic_map.update(self._extract_objects(event))
+        objects = self._extract_objects(event)
+        self.subsystem.update_objects(objects)
+        agent_pos = event.metadata.get("agent", {}).get("position")
+        if agent_pos:
+            self.subsystem.update_agent_position((float(agent_pos["x"]), float(agent_pos["y"]), float(agent_pos["z"])))
+        return event
 
-    def search_for_object(self, target_type: str, max_steps: int) -> Optional[SemanticObject]:
+    def search_for_object(self, target_type: str, max_steps: int) -> Optional[SearchResult]:
         action_cycle = [
             {"action": "RotateLeft", "forceAction": True},
             {"action": "MoveAhead", "forceAction": True},
@@ -74,13 +52,20 @@ class AlfredNavigator:
             {"action": "LookDown", "forceAction": True},
         ]
 
+        last_move_failed = False
         for step in range(max_steps):
-            current = self.semantic_map.find(target_type)
-            if current:
-                agent_pos = self.controller.last_event.metadata["agent"]["position"]
-                return self._closest(current, agent_pos)
+            result = self.subsystem.search_target(target_type)
+            if result.found:
+                return result
 
-            self.step_and_update(action_cycle[step % len(action_cycle)])
+            action = action_cycle[step % len(action_cycle)]
+            if last_move_failed:
+                action = {"action": "RotateLeft", "forceAction": True}
+            event = self.step_and_update(action)
+            last_move_failed = (
+                action.get("action") == "MoveAhead"
+                and not event.metadata.get("lastActionSuccess", True)
+            )
 
         return None
 
@@ -93,10 +78,19 @@ def _safe_step(controller, action: Dict) -> None:
         print(f"Skipping unsupported action '{action_name}': {exc}")
 
 
+def _normalize_init_action(action: Dict) -> Dict:
+    if action.get("action") != "TeleportFull":
+        return dict(action)
+    sanitized = dict(action)
+    sanitized.pop("rotateOnTeleport", None)
+    return sanitized
+
+
 def _initialize_scene(controller, scene: AlfredSceneConfig) -> None:
     scene_name = f"FloorPlan{scene.scene_number}"
     controller.reset(scene_name)
     _safe_step(
+        controller,
         dict(
             action="Initialize",
             gridSize=0.25,
@@ -107,7 +101,7 @@ def _initialize_scene(controller, scene: AlfredSceneConfig) -> None:
             renderObjectImage=False,
             visibility_distance=1.5,
             makeAgentsVisible=False,
-        )
+        ),
     )
 
     if scene.object_toggles:
@@ -118,7 +112,7 @@ def _initialize_scene(controller, scene: AlfredSceneConfig) -> None:
     if scene.object_poses:
         _safe_step(controller, dict(action="SetObjectPoses", objectPoses=scene.object_poses))
     if scene.init_action:
-        _safe_step(controller, dict(scene.init_action))
+        _safe_step(controller, _normalize_init_action(scene.init_action))
 
 
 def main() -> None:
@@ -144,7 +138,7 @@ def main() -> None:
     if result is None:
         print(f"Target '{args.target}' not found after {args.max_steps} steps.")
     else:
-        print(f"Found {result.object_type} (id={result.object_id}) at {result.position}")
+        print(f"Found {result.target_type} (id={result.object_id}) at {result.position}")
 
     controller.stop()
 
