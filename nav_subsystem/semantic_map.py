@@ -18,10 +18,15 @@ class SemanticObject:
 
 class SemanticMap:
     def __init__(self, objects: Iterable[SceneObject]):
-        self._objects: List[SemanticObject] = [
+        self._objects: List[SemanticObject] = []
+        self._index: Dict[str, List[SemanticObject]] = {}
+        self.update(objects)
+
+    def update(self, objects: Iterable[SceneObject]) -> None:
+        self._objects = [
             SemanticObject(obj.object_id, obj.object_type, obj.position) for obj in objects
         ]
-        self._index: Dict[str, List[SemanticObject]] = {}
+        self._index = {}
         for obj in self._objects:
             self._index.setdefault(obj.object_type.lower(), []).append(obj)
 
